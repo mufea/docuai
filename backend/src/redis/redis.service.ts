@@ -1,46 +1,61 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { AppConfig } from '../config/configuration';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(RedisService.name);
   private readonly client: Redis;
 
-  constructor(configService: ConfigService) {
-    this.client = new Redis(configService.getOrThrow<string>('redisUrl'), {
+  constructor(private readonly configService: ConfigService<AppConfig, true>) {
+    const { url } = this.configService.get('redis', { infer: true });
+    this.client = new Redis(url, {
       lazyConnect: true,
       maxRetriesPerRequest: 2,
-      enableReadyCheck: true,
+      enableOfflineQueue: false,
+      retryStrategy: (attempt) => Math.min(attempt * 200, 5000),
+    });
+
+    this.client.on('error', (error: Error) => {
+      this.logger.warn(`Redis error: ${error.message}`);
     });
   }
 
+  getClient(): Redis {
+    return this.client;
+  }
+
   async onModuleInit(): Promise<void> {
-    await this.client.connect();
+    try {
+      await this.client.connect();
+      this.logger.log('Connected to Redis');
+    } catch (error) {
+      // Do not crash the app on startup: health checks report the outage and
+      // ioredis keeps reconnecting in the background.
+      this.logger.error(
+        `Initial Redis connection failed: ${(error as Error).message}`,
+      );
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
-    if (this.client.status !== 'end') {
-      await this.client.quit();
+    await this.client.quit().catch(() => this.client.disconnect());
+  }
+
+  async isHealthy(): Promise<boolean> {
+    try {
+      return (await this.client.ping()) === 'PONG';
+    } catch (error) {
+      this.logger.warn(
+        `Redis health check failed: ${(error as Error).message}`,
+      );
+      return false;
     }
-  }
-
-  get(key: string): Promise<string | null> {
-    return this.client.get(key);
-  }
-
-  async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
-    if (ttlSeconds) {
-      await this.client.set(key, value, 'EX', ttlSeconds);
-      return;
-    }
-    await this.client.set(key, value);
-  }
-
-  async del(key: string): Promise<void> {
-    await this.client.del(key);
-  }
-
-  ping(): Promise<string> {
-    return this.client.ping();
   }
 }

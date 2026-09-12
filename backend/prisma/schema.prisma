@@ -1,17 +1,67 @@
+// DocuAI Prisma schema.
+// Migrations live in prisma/migrations and must never be edited after they
+// have been applied; add a new migration instead.
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-model SystemConfig {
-  id        String   @id @default(uuid()) @db.Uuid
-  key       String   @unique
-  value     String   @db.Text
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ---------------------------------------------------------------------------
+// Phase 1 — Authentication & User Management
+// ---------------------------------------------------------------------------
 
-  @@map("system_config")
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+model User {
+  id            String     @id @default(uuid()) @db.Uuid
+  /// Always stored normalised (trimmed + lower-cased).
+  email         String     @unique @db.VarChar(320)
+  /// Argon2id PHC string. Never exposed through the API.
+  passwordHash  String     @map("password_hash")
+  name          String?    @db.VarChar(100)
+  avatarUrl     String?    @map("avatar_url") @db.VarChar(2048)
+  status        UserStatus @default(ACTIVE)
+  emailVerified Boolean    @default(false) @map("email_verified")
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+/// One row per device session. Only an HMAC-SHA256 hash of the opaque refresh
+/// token is stored; the raw token exists solely on the client.
+model RefreshToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash") @db.Char(64)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  /// Set on logout, rotation or security revocation. Rows are kept for audit
+  /// and reuse detection; a later phase may prune old rows.
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+  /// Optional session metadata (see docs/DATABASE.md for privacy notes).
+  deviceName String?   @map("device_name") @db.VarChar(100)
+  userAgent  String?   @map("user_agent") @db.VarChar(255)
+  ipAddress  String?   @map("ip_address") @db.VarChar(45)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Hard-deleting a user removes all of their sessions. Normal account
+  // removal uses status = DELETED (soft delete) and revocation instead.
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
 }

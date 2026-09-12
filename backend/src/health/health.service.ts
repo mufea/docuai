@@ -1,13 +1,15 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 
-export interface HealthStatus {
-  status: 'ok';
-  service: string;
-  database: 'up';
-  redis: 'up';
+export type DependencyStatus = 'up' | 'down';
+
+export interface HealthReport {
+  status: 'ok' | 'degraded';
+  database: DependencyStatus;
+  redis: DependencyStatus;
+  uptime: number;
+  timestamp: string;
 }
 
 @Injectable()
@@ -15,30 +17,20 @@ export class HealthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
-    private readonly config: ConfigService,
   ) {}
 
-  async check(): Promise<HealthStatus> {
-    const [database, redis] = await Promise.allSettled([
-      this.prisma.$queryRaw`SELECT 1`,
-      this.redis.ping(),
+  async check(): Promise<HealthReport> {
+    const [database, redis] = await Promise.all([
+      this.prisma.isHealthy(),
+      this.redis.isHealthy(),
     ]);
-    const failures: string[] = [];
-    if (database.status === 'rejected') failures.push('PostgreSQL');
-    if (redis.status === 'rejected') failures.push('Redis');
-
-    if (failures.length > 0) {
-      throw new ServiceUnavailableException({
-        code: 'DEPENDENCY_UNAVAILABLE',
-        message: `${failures.join(' and ')} unavailable`,
-      });
-    }
 
     return {
-      status: 'ok',
-      service: `${this.config.get<string>('appName', 'DocuAI')} API`,
-      database: 'up',
-      redis: 'up',
+      status: database && redis ? 'ok' : 'degraded',
+      database: database ? 'up' : 'down',
+      redis: redis ? 'up' : 'down',
+      uptime: Math.round(process.uptime()),
+      timestamp: new Date().toISOString(),
     };
   }
 }

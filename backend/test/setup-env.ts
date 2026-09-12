@@ -1,13 +1,3 @@
-process.env.NODE_ENV ??= 'test';
-process.env.APP_NAME ??= 'DocuAI';
-process.env.APP_PORT ??= '3000';
-process.env.API_PREFIX ??= 'api/v1';
-process.env.DATABASE_URL ??=
-  'postgresql://docuai:docuai_dev_password@postgres:5432/docuai?schema=public';
-process.env.REDIS_URL ??= 'redis://redis:6379';
-process.env.LOG_LEVEL ??= 'silent';
-process.env.CORS_ORIGINS ??= 'http://localhost:3000';
-process.env.RATE_LIMIT_TTL ??= '60';
-process.env.RATE_LIMIT_LIMIT ??= '1000';
-process.env.JWT_ACCESS_SECRET ??= 'CHANGE_ME';
-process.env.JWT_REFRESH_SECRET ??= 'CHANGE_ME';
+import { prepareTestEnv } from './test-env';
+
+prepareTestEnv();

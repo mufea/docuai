@@ -1,80 +1,103 @@
+name: docuai
+
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: docuai-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: docuai
-      POSTGRES_USER: docuai
-      POSTGRES_PASSWORD: docuai_dev_password
+      POSTGRES_USER: ${POSTGRES_USER:-docuai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-docuai}
+      POSTGRES_DB: ${POSTGRES_DB:-docuai}
     ports:
-      - "5432:5432"
+      - '${POSTGRES_PORT:-5433}:5432'
     volumes:
-      - docuai-postgres-data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+      # Creates the isolated `docuai_test` database used by the test suite.
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U docuai -d docuai"]
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 5s
       timeout: 5s
       retries: 10
     networks:
-      - docuai-network
+      - docuai
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    container_name: docuai-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
     ports:
-      - "6379:6379"
+      - '${REDIS_PORT:-6380}:6379'
     volumes:
-      - docuai-redis-data:/data
+      - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 5s
       retries: 10
     networks:
-      - docuai-network
+      - docuai
 
   backend:
     build:
       context: ./backend
-    environment:
-      NODE_ENV: development
-      APP_NAME: DocuAI
-      APP_PORT: 3000
-      API_PREFIX: api/v1
-      DATABASE_URL: postgresql://docuai:docuai_dev_password@postgres:5432/docuai?schema=public
-      REDIS_URL: redis://redis:6379
-      JWT_ACCESS_SECRET: CHANGE_ME
-      JWT_REFRESH_SECRET: CHANGE_ME
-      JWT_ACCESS_EXPIRES_IN: 15m
-      JWT_REFRESH_EXPIRES_IN: 30d
-      LOG_LEVEL: debug
-      CORS_ORIGINS: http://localhost:3000,http://localhost:8080
-      RATE_LIMIT_TTL: 60
-      RATE_LIMIT_LIMIT: 100
-    ports:
-      - "3000:3000"
+      dockerfile: Dockerfile
+    container_name: docuai-backend
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 4310
+      API_PREFIX: api/v1
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-docuai}:${POSTGRES_PASSWORD:-docuai}@postgres:5432/${POSTGRES_DB:-docuai}
+      TEST_DATABASE_URL: postgresql://${POSTGRES_USER:-docuai}:${POSTGRES_PASSWORD:-docuai}@postgres:5432/${POSTGRES_DB:-docuai}_test
+      REDIS_URL: redis://redis:6379/0
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
+      THROTTLE_TTL: ${THROTTLE_TTL:-60}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+      # Authentication (Phase 1). The defaults are for local development only;
+      # the app refuses to start in production with them. Set real values in a
+      # root-level .env file (see .env.example).
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-only-insecure-access-secret-do-not-use-in-production}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-only-insecure-refresh-secret-do-not-use-in-production}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-30d}
+      AUTH_LOGIN_RATE_LIMIT: ${AUTH_LOGIN_RATE_LIMIT:-10}
+      AUTH_LOGIN_RATE_WINDOW: ${AUTH_LOGIN_RATE_WINDOW:-60}
+      AUTH_REGISTER_RATE_LIMIT: ${AUTH_REGISTER_RATE_LIMIT:-5}
+      AUTH_REGISTER_RATE_WINDOW: ${AUTH_REGISTER_RATE_WINDOW:-60}
+      AUTH_REFRESH_RATE_LIMIT: ${AUTH_REFRESH_RATE_LIMIT:-20}
+      AUTH_REFRESH_RATE_WINDOW: ${AUTH_REFRESH_RATE_WINDOW:-60}
+    ports:
+      - '${BACKEND_PORT:-4310}:4310'
     healthcheck:
       test:
         [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4310/api/v1/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
         ]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 6
+      start_period: 20s
     networks:
-      - docuai-network
-
-networks:
-  docuai-network:
-    name: docuai-network
+      - docuai
 
 volumes:
-  docuai-postgres-data:
-  docuai-redis-data:
+  postgres_data:
+  redis_data:
+
+networks:
+  docuai:
+    driver: bridge
