@@ -1,0 +1,97 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: docuai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: docuai
+      POSTGRES_USER: docuai
+      POSTGRES_PASSWORD: docuai_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - docuai-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docuai -d docuai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - docuai-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: docuai-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - docuai-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - docuai-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: docuai-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      APP_NAME: DocuAI
+      APP_PORT: "3000"
+      API_PREFIX: api/v1
+      DATABASE_URL: postgresql://docuai:docuai_dev_password@postgres:5432/docuai?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: CHANGE_ME
+      JWT_REFRESH_SECRET: CHANGE_ME
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 30d
+      LOG_LEVEL: debug
+      CORS_ORIGINS: http://localhost:3000,http://localhost:8080
+      RATE_LIMIT_TTL: "60"
+      RATE_LIMIT_LIMIT: "100"
+    extra_hosts:
+      # Reach published Postgres/Redis ports via the Docker host gateway.
+      # This keeps DATABASE_URL/REDIS_URL on the compose service hostnames
+      # even when userland bridge ICC is restricted.
+      - "postgres:host-gateway"
+      - "redis:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/v1/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - docuai-network
+
+volumes:
+  docuai-postgres-data:
+  docuai-redis-data:
+
+networks:
+  docuai-network:
+    name: docuai-network
+    driver: bridge
