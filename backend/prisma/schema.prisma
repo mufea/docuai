@@ -4,13 +4,14 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model SystemConfig {
-  id        String   @id @default(uuid())
+  id        String   @id @default(uuid()) @db.Uuid
   key       String   @unique
-  value     String
+  value     String   @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@map("system_config")
 }

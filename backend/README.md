@@ -1,31 +1,22 @@
 # DocuAI Backend
 
-NestJS API for DocuAI Phase 0: configuration, health checks, Prisma, Redis, and baseline security.
+NestJS Phase 0 API with PostgreSQL/Prisma and Redis.
 
-## Scripts
+## Local configuration
+
+Copy `.env.example` to `.env` when running outside Docker and update dependency hostnames (`postgres` and `redis`) to `localhost`.
+
+## Commands
 
 ```bash
+npm install
+npx prisma generate
 npm run start:dev
 npm run build
-npm run start:prod
 npm test
 npm run lint
-npm run prisma:generate
-npm run prisma:migrate
-npm run prisma:migrate:deploy
 ```
 
-## Environment
+Committed migrations are applied by the container entry command before the API starts. Create future migrations with `npx prisma migrate dev --name <name>` against a development database; do not use `db push`.
 
-Copy `.env.example` to `.env` and adjust hostnames for local (non-Docker) development:
-
-```
-DATABASE_URL=postgresql://docuai:docuai_dev_password@localhost:5432/docuai?schema=public
-REDIS_URL=redis://localhost:6379
-```
-
-JWT variables are placeholders for later phases and are not used in Phase 0.
-
-## Health
-
-`GET /api/v1/health` reports application, PostgreSQL, and Redis status.
+The API uses the global prefix `/api/v1`. Authentication is deliberately not implemented in Phase 0.

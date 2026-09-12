@@ -1,22 +1,14 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
-import type { NextFunction, Request, Response } from 'express';
-import { requestContext } from '../utils/request-context';
-import { resolveRequestId } from '../utils/request-id.util';
-
-export const REQUEST_ID_HEADER = 'X-Request-ID';
+import { randomUUID } from 'crypto';
+import { NextFunction, Response } from 'express';
+import { RequestWithId } from '../interfaces/request-with-id.interface';
 
 @Injectable()
 export class RequestIdMiddleware implements NestMiddleware {
-  use(req: Request, res: Response, next: NextFunction): void {
-    const requestId = resolveRequestId(
-      req.header(REQUEST_ID_HEADER),
-      typeof req.id === 'string' ? req.id : undefined,
-    );
-
-    req.requestId = requestId;
-    req.id = requestId;
-    res.setHeader(REQUEST_ID_HEADER, requestId);
-
-    requestContext.run({ requestId }, () => next());
+  use(request: RequestWithId, response: Response, next: NextFunction): void {
+    const suppliedId = request.header('X-Request-ID')?.trim();
+    request.requestId = suppliedId || randomUUID();
+    response.setHeader('X-Request-ID', request.requestId);
+    next();
   }
 }

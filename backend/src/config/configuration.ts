@@ -1,29 +1,26 @@
 export interface AppConfiguration {
-  nodeEnv: 'development' | 'production' | 'test';
+  nodeEnv: string;
   appName: string;
-  appPort: number;
+  port: number;
   apiPrefix: string;
   databaseUrl: string;
   redisUrl: string;
-  logLevel: string;
   corsOrigins: string[];
-  rateLimitTtl: number;
+  rateLimitTtlSeconds: number;
   rateLimitLimit: number;
 }
 
-export default (): AppConfiguration => ({
-  nodeEnv: (process.env.NODE_ENV ??
-    'development') as AppConfiguration['nodeEnv'],
+export const configuration = (): AppConfiguration => ({
+  nodeEnv: process.env.NODE_ENV ?? 'development',
   appName: process.env.APP_NAME ?? 'DocuAI',
-  appPort: parseInt(process.env.APP_PORT ?? '3000', 10),
+  port: Number(process.env.APP_PORT ?? 3000),
   apiPrefix: process.env.API_PREFIX ?? 'api/v1',
   databaseUrl: process.env.DATABASE_URL ?? '',
   redisUrl: process.env.REDIS_URL ?? '',
-  logLevel: process.env.LOG_LEVEL ?? 'info',
-  corsOrigins: (process.env.CORS_ORIGINS ?? '')
+  corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:3000')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
-  rateLimitTtl: parseInt(process.env.RATE_LIMIT_TTL ?? '60', 10),
-  rateLimitLimit: parseInt(process.env.RATE_LIMIT_LIMIT ?? '100', 10),
+  rateLimitTtlSeconds: Number(process.env.RATE_LIMIT_TTL ?? 60),
+  rateLimitLimit: Number(process.env.RATE_LIMIT_LIMIT ?? 100),
 });
