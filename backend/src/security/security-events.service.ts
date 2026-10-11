@@ -9,6 +9,24 @@ export enum SecurityEventType {
   REFRESH_TOKEN_ROTATED = 'REFRESH_TOKEN_ROTATED',
   REFRESH_TOKEN_REJECTED = 'REFRESH_TOKEN_REJECTED',
   REFRESH_TOKEN_REUSE_DETECTED = 'REFRESH_TOKEN_REUSE_DETECTED',
+  // Phase 2 — documents & files. Details carry ids only (documentId,
+  // folderId, status); never titles, file names, keys or URLs.
+  DOCUMENT_CREATED = 'DOCUMENT_CREATED',
+  DOCUMENT_UPDATED = 'DOCUMENT_UPDATED',
+  DOCUMENT_DELETED = 'DOCUMENT_DELETED',
+  DOCUMENT_ACCESS_DENIED = 'DOCUMENT_ACCESS_DENIED',
+  FOLDER_CREATED = 'FOLDER_CREATED',
+  FOLDER_UPDATED = 'FOLDER_UPDATED',
+  FOLDER_DELETED = 'FOLDER_DELETED',
+  FOLDER_ACCESS_DENIED = 'FOLDER_ACCESS_DENIED',
+  UPLOAD_URL_CREATED = 'UPLOAD_URL_CREATED',
+  UPLOAD_COMPLETED = 'UPLOAD_COMPLETED',
+  UPLOAD_REJECTED = 'UPLOAD_REJECTED',
+  DOWNLOAD_URL_CREATED = 'DOWNLOAD_URL_CREATED',
+  // Phase 3 — OCR. Details carry ids, language and status only; never
+  // extracted text.
+  OCR_JOB_REQUESTED = 'OCR_JOB_REQUESTED',
+  OCR_RETRY_REQUESTED = 'OCR_RETRY_REQUESTED',
 }
 
 /**
@@ -37,6 +55,20 @@ const EVENT_LEVEL: Record<SecurityEventType, 'log' | 'warn'> = {
   [SecurityEventType.REFRESH_TOKEN_ROTATED]: 'log',
   [SecurityEventType.REFRESH_TOKEN_REJECTED]: 'warn',
   [SecurityEventType.REFRESH_TOKEN_REUSE_DETECTED]: 'warn',
+  [SecurityEventType.DOCUMENT_CREATED]: 'log',
+  [SecurityEventType.DOCUMENT_UPDATED]: 'log',
+  [SecurityEventType.DOCUMENT_DELETED]: 'log',
+  [SecurityEventType.DOCUMENT_ACCESS_DENIED]: 'warn',
+  [SecurityEventType.FOLDER_CREATED]: 'log',
+  [SecurityEventType.FOLDER_UPDATED]: 'log',
+  [SecurityEventType.FOLDER_DELETED]: 'log',
+  [SecurityEventType.FOLDER_ACCESS_DENIED]: 'warn',
+  [SecurityEventType.UPLOAD_URL_CREATED]: 'log',
+  [SecurityEventType.UPLOAD_COMPLETED]: 'log',
+  [SecurityEventType.UPLOAD_REJECTED]: 'warn',
+  [SecurityEventType.DOWNLOAD_URL_CREATED]: 'log',
+  [SecurityEventType.OCR_JOB_REQUESTED]: 'log',
+  [SecurityEventType.OCR_RETRY_REQUESTED]: 'log',
 };
 
 /**

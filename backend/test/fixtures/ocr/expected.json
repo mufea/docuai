@@ -1,0 +1,148 @@
+{
+  "text.pdf": {
+    "pages": 1,
+    "keywords": [
+      [
+        "native",
+        "text",
+        "fixture",
+        "quick",
+        "brown",
+        "fox",
+        "12345"
+      ]
+    ]
+  },
+  "text-3pages.pdf": {
+    "pages": 3,
+    "keywords": [
+      [
+        "page",
+        "1",
+        "alpha",
+        "111"
+      ],
+      [
+        "page",
+        "2",
+        "bravo",
+        "222"
+      ],
+      [
+        "page",
+        "3",
+        "charlie",
+        "333"
+      ]
+    ]
+  },
+  "text-6pages.pdf": {
+    "pages": 6
+  },
+  "long-text.pdf": {
+    "pages": 2,
+    "keywords": [
+      [
+        "long",
+        "text",
+        "page",
+        "1",
+        "line",
+        "01"
+      ],
+      [
+        "long",
+        "text",
+        "page",
+        "2",
+        "line",
+        "01"
+      ]
+    ]
+  },
+  "scanned.pdf": {
+    "pages": 2,
+    "keywords": [
+      [
+        "scanned",
+        "page",
+        "one",
+        "docuai"
+      ],
+      [
+        "scanned",
+        "page",
+        "two",
+        "second",
+        "sheet"
+      ]
+    ]
+  },
+  "mixed.pdf": {
+    "pages": 2,
+    "keywords": [
+      [
+        "native",
+        "text",
+        "page",
+        "mixed",
+        "first"
+      ],
+      [
+        "scanned",
+        "image",
+        "page",
+        "mixed",
+        "second"
+      ]
+    ]
+  },
+  "printed.png": {
+    "pages": 1,
+    "keywords": [
+      [
+        "docuai",
+        "ocr",
+        "test",
+        "image",
+        "hello",
+        "world",
+        "2026"
+      ]
+    ]
+  },
+  "printed.jpg": {
+    "pages": 1,
+    "keywords": [
+      [
+        "docuai",
+        "ocr",
+        "test",
+        "image",
+        "hello",
+        "world",
+        "2026"
+      ]
+    ]
+  },
+  "printed.webp": {
+    "pages": 1,
+    "keywords": [
+      [
+        "docuai",
+        "ocr",
+        "test",
+        "image",
+        "hello",
+        "world",
+        "2026"
+      ]
+    ]
+  },
+  "blank.png": {
+    "pages": 1,
+    "keywords": [
+      []
+    ]
+  }
+}

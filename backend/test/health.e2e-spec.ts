@@ -23,12 +23,51 @@ describe('Phase 0 foundation (e2e)', () => {
           status: 'ok',
           database: 'up',
           redis: 'up',
+          storage: 'up',
+          ocr: 'ready',
           uptime: expect.any(Number),
           timestamp: expect.any(String),
         }),
         message: null,
         requestId: expect.any(String),
       });
+    });
+  });
+
+  describe('GET /api/v1/health/ocr', () => {
+    it('reports the OCR engine, renderer, installed languages, queue and worker', async () => {
+      const res = await request(ctx.app.getHttpServer()).get(
+        '/api/v1/health/ocr',
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      const data = res.body.data;
+      expect(data.status).toBe('ready');
+      expect(data.engine).toEqual({
+        available: true,
+        name: 'tesseract',
+        version: expect.stringMatching(/^\d+\.\d+/),
+      });
+      expect(data.renderer).toEqual({
+        available: true,
+        name: 'poppler',
+        version: expect.stringMatching(/^\d+\.\d+/),
+      });
+      expect(data.languages.default).toBe('ind+eng');
+      expect(data.languages.defaultAvailable).toBe(true);
+      expect(data.languages.available).toEqual(
+        expect.arrayContaining(['ind', 'eng']),
+      );
+      // Everything advertised is really installed; nothing else is claimed.
+      expect(data.languages.missing).toEqual([]);
+      expect(data.queue).toMatchObject({
+        status: 'up',
+        name: 'docuai-ocr-test',
+      });
+      expect(data.worker).toEqual({ state: 'running', concurrency: 1 });
+      // No secrets or paths.
+      expect(JSON.stringify(data)).not.toMatch(/secret|password|\/tmp/i);
     });
   });
 

@@ -6,11 +6,15 @@ import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis'
 import { AppConfig, loadConfiguration } from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
 import { AuthModule } from './auth/auth.module';
+import { DocumentsModule } from './documents/documents.module';
+import { FoldersModule } from './folders/folders.module';
 import { HealthModule } from './health/health.module';
+import { OcrModule } from './ocr/ocr.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { RedisService } from './redis/redis.service';
 import { SecurityModule } from './security/security.module';
+import { StorageModule } from './storage/storage.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -25,6 +29,7 @@ import { UsersModule } from './users/users.module';
     }),
     PrismaModule,
     RedisModule,
+    StorageModule,
     ThrottlerModule.forRootAsync({
       inject: [ConfigService, RedisService],
       useFactory: (
@@ -48,6 +53,9 @@ import { UsersModule } from './users/users.module';
     HealthModule,
     UsersModule,
     AuthModule,
+    FoldersModule,
+    DocumentsModule,
+    OcrModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

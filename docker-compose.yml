@@ -40,6 +40,35 @@ services:
     networks:
       - docuai
 
+  # Private S3-compatible object storage for local development (Phase 2).
+  # RustFS is used because the MinIO community image is no longer published.
+  # Only the S3 API port is exposed, bound to loopback by default; the admin
+  # console (9001) is never published. No bucket policy or anonymous access
+  # is ever configured - every client access goes through short-lived
+  # presigned URLs issued by the backend. For production use a managed
+  # S3-compatible service (or a hardened deployment behind TLS) and point
+  # S3_ENDPOINT / S3_PUBLIC_ENDPOINT at it.
+  storage:
+    image: rustfs/rustfs:1.0.1
+    container_name: docuai-storage
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-docuai-storage}
+      RUSTFS_SECRET_KEY: ${STORAGE_SECRET_KEY:-docuai-storage-secret-dev}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_OBS_LOGGER_LEVEL: ${STORAGE_LOG_LEVEL:-warn}
+    ports:
+      - '${STORAGE_BIND:-127.0.0.1}:${STORAGE_PORT:-9000}:9000'
+    volumes:
+      - storage_data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:9000/health']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - docuai
+
   backend:
     build:
       context: ./backend
@@ -50,6 +79,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      storage:
         condition: service_healthy
     environment:
       NODE_ENV: ${NODE_ENV:-development}
@@ -77,6 +108,49 @@ services:
       AUTH_REGISTER_RATE_WINDOW: ${AUTH_REGISTER_RATE_WINDOW:-60}
       AUTH_REFRESH_RATE_LIMIT: ${AUTH_REFRESH_RATE_LIMIT:-20}
       AUTH_REFRESH_RATE_WINDOW: ${AUTH_REFRESH_RATE_WINDOW:-60}
+      # Object storage (Phase 2). The API reaches the storage container over
+      # the compose network; presigned URLs handed to clients are signed for
+      # S3_PUBLIC_ENDPOINT, which must be reachable from the client. The
+      # development credentials are refused when NODE_ENV=production.
+      STORAGE_PROVIDER: s3
+      S3_ENDPOINT: http://storage:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-docuai-private}
+      TEST_S3_BUCKET: ${S3_BUCKET:-docuai-private}-test
+      S3_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-docuai-storage}
+      S3_SECRET_KEY: ${STORAGE_SECRET_KEY:-docuai-storage-secret-dev}
+      S3_FORCE_PATH_STYLE: 'true'
+      S3_PRESIGNED_UPLOAD_EXPIRES_SECONDS: ${S3_PRESIGNED_UPLOAD_EXPIRES_SECONDS:-900}
+      S3_PRESIGNED_DOWNLOAD_EXPIRES_SECONDS: ${S3_PRESIGNED_DOWNLOAD_EXPIRES_SECONDS:-300}
+      S3_AUTO_CREATE_BUCKET: ${S3_AUTO_CREATE_BUCKET:-}
+      MAX_DOCUMENT_FILE_SIZE_BYTES: ${MAX_DOCUMENT_FILE_SIZE_BYTES:-52428800}
+      ALLOWED_DOCUMENT_MIME_TYPES: ${ALLOWED_DOCUMENT_MIME_TYPES:-application/pdf,image/jpeg,image/png,image/webp}
+      DOCUMENT_PRESIGN_RATE_LIMIT: ${DOCUMENT_PRESIGN_RATE_LIMIT:-30}
+      DOCUMENT_PRESIGN_RATE_WINDOW: ${DOCUMENT_PRESIGN_RATE_WINDOW:-60}
+      # OCR (Phase 3). The worker runs inside this container with bounded
+      # concurrency; set OCR_WORKER_ENABLED=false here and run a second
+      # instance of this image with OCR_WORKER_ENABLED=true to split them.
+      OCR_ENABLED: ${OCR_ENABLED:-true}
+      OCR_WORKER_ENABLED: ${OCR_WORKER_ENABLED:-true}
+      OCR_DEFAULT_LANGUAGE: ${OCR_DEFAULT_LANGUAGE:-ind+eng}
+      OCR_SUPPORTED_LANGUAGES: ${OCR_SUPPORTED_LANGUAGES:-ind,eng,msa,ara,chi_sim,jpn,kor,deu,fra,spa}
+      OCR_QUEUE_NAME: ${OCR_QUEUE_NAME:-docuai-ocr}
+      OCR_MAX_CONCURRENCY: ${OCR_MAX_CONCURRENCY:-1}
+      OCR_MAX_RETRIES: ${OCR_MAX_RETRIES:-2}
+      OCR_JOB_TIMEOUT_MS: ${OCR_JOB_TIMEOUT_MS:-600000}
+      OCR_PAGE_TIMEOUT_MS: ${OCR_PAGE_TIMEOUT_MS:-60000}
+      OCR_STALE_JOB_MS: ${OCR_STALE_JOB_MS:-120000}
+      OCR_RECONCILE_INTERVAL_MS: ${OCR_RECONCILE_INTERVAL_MS:-60000}
+      OCR_MAX_PDF_PAGES: ${OCR_MAX_PDF_PAGES:-100}
+      OCR_RENDER_DPI: ${OCR_RENDER_DPI:-150}
+      OCR_MAX_TEXT_PER_PAGE: ${OCR_MAX_TEXT_PER_PAGE:-200000}
+      OCR_MAX_TEXT_PER_DOCUMENT: ${OCR_MAX_TEXT_PER_DOCUMENT:-2000000}
+      OCR_REQUEST_RATE_LIMIT: ${OCR_REQUEST_RATE_LIMIT:-10}
+      OCR_REQUEST_RATE_WINDOW: ${OCR_REQUEST_RATE_WINDOW:-60}
+    # Give the OCR job in flight time to finish on SIGTERM; longer jobs are
+    # resumed from their last persisted page after the restart.
+    stop_grace_period: 30s
     ports:
       - '${BACKEND_PORT:-4310}:4310'
     healthcheck:
@@ -97,6 +171,7 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  storage_data:
 
 networks:
   docuai:

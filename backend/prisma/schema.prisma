@@ -35,6 +35,9 @@ model User {
   updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   refreshTokens RefreshToken[]
+  folders       Folder[]
+  documents     Document[]
+  ocrJobs       OcrJob[]
 
   @@map("users")
 }
@@ -64,4 +67,206 @@ model RefreshToken {
   @@index([userId, revokedAt])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — Document & File Management
+// ---------------------------------------------------------------------------
+
+/// Lifecycle of a document's file. See docs/ARCHITECTURE.md "Document
+/// lifecycle" for the allowed transitions.
+enum DocumentStatus {
+  /// Metadata only; no upload has been requested yet.
+  DRAFT
+  /// A presigned upload URL has been issued; the object may or may not exist.
+  UPLOADING
+  /// The object exists in storage and its metadata has been verified.
+  READY
+  /// Reserved for later phases (OCR, AI, conversion). Never set in Phase 2.
+  PROCESSING
+  /// Upload verification failed; a new upload URL may be requested.
+  FAILED
+  /// Soft-deleted (`deletedAt` set). Invisible to every endpoint.
+  DELETED
+}
+
+/// User-defined hierarchy for organising documents. Folders are strictly
+/// per-user: `parentId` must reference a folder of the same user, which the
+/// service layer enforces together with cycle and depth checks.
+model Folder {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String   @db.VarChar(100)
+  parentId  String?  @map("parent_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Restrict: a user row cannot be physically removed while folders exist.
+  // Explicit clean-up (which also moves/purges documents) must happen first.
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  // Restrict: child folders are re-parented by the service inside the same
+  // transaction before the folder row is deleted. The constraint guarantees
+  // the database never silently drops or orphans part of a hierarchy.
+  parent   Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children Folder[] @relation("FolderHierarchy")
+
+  documents Document[]
+
+  @@index([userId])
+  @@index([userId, parentId])
+  @@map("folders")
+}
+
+/// A user-owned document. The binary lives in private object storage under
+/// `storageKey`; this row holds the server-controlled metadata.
+model Document {
+  id           String         @id @default(uuid()) @db.Uuid
+  userId       String         @map("user_id") @db.Uuid
+  folderId     String?        @map("folder_id") @db.Uuid
+  title        String         @db.VarChar(255)
+  description  String?        @db.VarChar(2000)
+  status       DocumentStatus @default(DRAFT)
+  /// Declared at upload-url time, verified against the stored object on
+  /// upload-complete. Always from the configured allowlist.
+  mimeType     String?        @map("mime_type") @db.VarChar(127)
+  /// Bytes. Declared at upload-url time, replaced by the verified size on
+  /// upload-complete.
+  fileSize     BigInt?        @map("file_size")
+  /// Reserved for PDF processing in a later phase; never set in Phase 2.
+  pageCount    Int?           @map("page_count")
+  /// Server-generated object key (`users/{userId}/documents/{documentId}/{random}`).
+  /// Never accepted from, nor returned to, clients.
+  storageKey   String?        @unique @map("storage_key") @db.VarChar(512)
+  /// Sanitised client-supplied file name, for display and Content-Disposition only.
+  originalName String?        @map("original_name") @db.VarChar(255)
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  /// Soft delete marker. Rows (and their storage objects) are retained for a
+  /// later clean-up mechanism; every query filters `deletedAt IS NULL`.
+  deletedAt    DateTime?      @map("deleted_at") @db.Timestamptz(6)
+
+  // Restrict: documents reference storage objects. Removing a user row while
+  // documents exist would orphan those objects, so physical user deletion
+  // requires an explicit purge (database rows + storage) first.
+  user   User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  // SetNull: deleting a folder must never delete documents. The service moves
+  // documents to the root explicitly; this is the database-level safety net.
+  folder Folder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  ocrJobs OcrJob[]
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([userId, folderId])
+  @@index([userId, deletedAt])
+  @@map("documents")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 — OCR & Document Text Extraction
+// ---------------------------------------------------------------------------
+
+/// Lifecycle of one extraction attempt over a document. Transitions are owned
+/// by the worker (and the reconciler); clients never set a status.
+///
+///   QUEUED ──► PROCESSING ──► COMPLETED   every page extracted (text or empty)
+///                        ├──► PARTIAL     at least one page FAILED, at least one succeeded
+///                        └──► FAILED      no page succeeded, or a permanent error
+///   QUEUED/PROCESSING ──► CANCELLED        document deleted / no longer READY
+///   PROCESSING ──► QUEUED                  transient failure, attempts remaining
+enum OcrJobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  PARTIAL
+  FAILED
+  CANCELLED
+}
+
+/// How text was obtained. Pages use NATIVE_TEXT or OCR; a job is MIXED when
+/// its pages used both.
+enum OcrExtractionMethod {
+  NATIVE_TEXT
+  OCR
+  MIXED
+}
+
+enum OcrPageStatus {
+  /// Text was extracted.
+  COMPLETED
+  /// The page was processed successfully but contained no recognisable text.
+  EMPTY
+  /// The page could not be processed; `errorCode` says why.
+  FAILED
+}
+
+/// One OCR / text-extraction job. Jobs are immutable once terminal; a
+/// reprocess or retry creates a new job so historical results are never mixed.
+model OcrJob {
+  id               String               @id @default(uuid()) @db.Uuid
+  documentId       String               @map("document_id") @db.Uuid
+  /// Denormalised owner (always equal to the document's owner) so every
+  /// query can be scoped by user without a join.
+  userId           String               @map("user_id") @db.Uuid
+  status           OcrJobStatus         @default(QUEUED)
+  /// Canonical Tesseract language list, e.g. `ind+eng`. Validated against the
+  /// installed language data before the job is created.
+  language         String               @db.VarChar(64)
+  extractionMethod OcrExtractionMethod? @map("extraction_method")
+  totalPages       Int?                 @map("total_pages")
+  /// Pages attempted so far (COMPLETED + EMPTY + FAILED). Never exceeds totalPages.
+  processedPages   Int                  @default(0) @map("processed_pages")
+  failedPages      Int                  @default(0) @map("failed_pages")
+  /// Safe, documented error code (see docs/API_SPEC.md); never raw messages.
+  errorCode        String?              @map("error_code") @db.VarChar(64)
+  /// Sanitised, client-safe explanation.
+  errorMessage     String?              @map("error_message") @db.VarChar(500)
+  /// Processing attempts started by a worker (bounded by maxAttempts).
+  attemptCount     Int                  @default(0) @map("attempt_count")
+  maxAttempts      Int                  @map("max_attempts")
+  /// Last progress signal from the worker; used to detect interrupted jobs.
+  heartbeatAt      DateTime?            @map("heartbeat_at") @db.Timestamptz(6)
+  startedAt        DateTime?            @map("started_at") @db.Timestamptz(6)
+  completedAt      DateTime?            @map("completed_at") @db.Timestamptz(6)
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Restrict: OCR history must be purged explicitly together with the
+  // document (documents are only ever soft-deleted in Phase 2/3 anyway).
+  document Document  @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  pages    OcrPage[]
+
+  @@index([documentId, createdAt])
+  @@index([documentId, status])
+  @@index([userId, createdAt])
+  @@index([status, heartbeatAt])
+  @@map("ocr_jobs")
+}
+
+/// Extracted text of one page (1-based). Exactly one row per (job, page).
+model OcrPage {
+  id         String               @id @default(uuid()) @db.Uuid
+  ocrJobId   String               @map("ocr_job_id") @db.Uuid
+  pageNumber Int                  @map("page_number")
+  status     OcrPageStatus
+  method     OcrExtractionMethod?
+  /// Extracted text, `null` when the page FAILED.
+  text       String?
+  /// Mean word confidence 0–100 reported by the OCR engine. `null` for native
+  /// text (not an OCR measurement) and for pages without recognised words.
+  confidence Decimal?             @db.Decimal(5, 2)
+  charCount  Int                  @default(0) @map("char_count")
+  /// True when `text` was cut at the configured per-page limit.
+  truncated  Boolean              @default(false)
+  errorCode  String?              @map("error_code") @db.VarChar(64)
+  createdAt  DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Cascade: pages have no meaning without their job.
+  job OcrJob @relation(fields: [ocrJobId], references: [id], onDelete: Cascade)
+
+  @@unique([ocrJobId, pageNumber])
+  @@map("ocr_pages")
 }

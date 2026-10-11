@@ -27,6 +27,9 @@ async function bootstrap(): Promise<void> {
     resolveLogLevels(configService.get('logLevel', { infer: true })),
   );
   configureApp(app);
+  // SIGTERM/SIGINT → onModuleDestroy hooks (OCR worker drains the job in
+  // flight, queue/Redis/Prisma connections close) before the process exits.
+  app.enableShutdownHooks();
 
   const port = configService.get('port', { infer: true });
   const prefix = configService.get('apiPrefix', { infer: true });

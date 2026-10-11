@@ -1,5 +1,5 @@
 import { INestApplication, LoggerService } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Test, TestingModuleBuilder } from '@nestjs/testing';
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -55,12 +55,21 @@ export class CapturingLogger implements LoggerService {
   }
 }
 
-export async function createTestApp(): Promise<TestContext> {
+export interface TestAppOptions {
+  /** Hook to override providers (e.g. a failing OCR engine) before compile. */
+  configure?: (builder: TestingModuleBuilder) => TestingModuleBuilder;
+}
+
+export async function createTestApp(
+  options: TestAppOptions = {},
+): Promise<TestContext> {
   const logs = new CapturingLogger();
 
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-    .setLogger(logs)
-    .compile();
+  let builder = Test.createTestingModule({ imports: [AppModule] }).setLogger(
+    logs,
+  );
+  if (options.configure) builder = options.configure(builder);
+  const moduleRef = await builder.compile();
 
   const app = moduleRef.createNestApplication({ logger: logs });
   configureApp(app);

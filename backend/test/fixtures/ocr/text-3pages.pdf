@@ -1,0 +1,82 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 110 >>
+stream
+BT
+/F1 28 Tf
+36 TL
+40 252 Td
+(Page 1 alpha) Tj
+T*
+(Native text content line) Tj
+T*
+(Sequence marker 111) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Type /Page /Parent 8 0 R /MediaBox [0 0 500 300] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R >>
+endobj
+4 0 obj
+<< /Length 110 >>
+stream
+BT
+/F1 28 Tf
+36 TL
+40 252 Td
+(Page 2 bravo) Tj
+T*
+(Native text content line) Tj
+T*
+(Sequence marker 222) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 8 0 R /MediaBox [0 0 500 300] /Resources << /Font << /F1 1 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Length 112 >>
+stream
+BT
+/F1 28 Tf
+36 TL
+40 252 Td
+(Page 3 charlie) Tj
+T*
+(Native text content line) Tj
+T*
+(Sequence marker 333) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 8 0 R /MediaBox [0 0 500 300] /Resources << /Font << /F1 1 0 R >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R] /Count 3 >>
+endobj
+9 0 obj
+<< /Type /Catalog /Pages 8 0 R >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000085 00000 n 
+0000000246 00000 n 
+0000000372 00000 n 
+0000000533 00000 n 
+0000000659 00000 n 
+0000000822 00000 n 
+0000000948 00000 n 
+0000001017 00000 n 
+trailer
+<< /Size 10 /Root 9 0 R >>
+startxref
+1066
+%%EOF

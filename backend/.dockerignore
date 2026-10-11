@@ -1,0 +1,8 @@
+# Never bake local artefacts or credentials into the image.
+node_modules
+dist
+coverage
+.env
+.env.*
+!.env.example
+*.log
